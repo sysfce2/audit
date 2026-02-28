@@ -1,5 +1,5 @@
 /* gen_tables.h -- Declarations used for lookup tables.
- * Copyright 2008 Red Hat Inc., Durham, North Carolina.
+ * Copyright 2008 Red Hat Inc.
  * All Rights Reserved.
  *
  * This library is free software; you can redistribute it and/or
@@ -33,6 +33,10 @@ inline static int s2i__(const char *strings, const unsigned *s_table,
 			const int *i_table, size_t n, const char *s, int *value)
 {
 	size_t lo = 0, hi = 0;
+
+	if (n == 0)
+		return 0;
+
 	ssize_t left = 0, right = n - 1;
 
 	while (left <= right) {	/* invariant: left <= x <= right */
@@ -84,6 +88,9 @@ inline static const char *i2s_bsearch__(const char *strings,
 					int v)
 {
 	ssize_t left, right;
+
+	if (n == 0)
+		return NULL;
 
 	left = 0;
 	right = n - 1;
