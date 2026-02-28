@@ -36,7 +36,8 @@ inline static int s2i__(const char *strings, const unsigned *s_table,
 	ssize_t left = 0, right = n - 1;
 
 	while (left <= right) {	/* invariant: left <= x <= right */
-		size_t mid, off, i;
+		ssize_t mid;
+		size_t off, i;
 		const char *t;
 		int r;
 
@@ -87,7 +88,7 @@ inline static const char *i2s_bsearch__(const char *strings,
 	left = 0;
 	right = n - 1;
 	while (left <= right) {	/* invariant: left <= x <= right */
-		size_t mid;
+		ssize_t mid;
 		int mid_val;
 
 		mid = (left + right) / 2;
