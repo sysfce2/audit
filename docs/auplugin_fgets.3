@@ -50,19 +50,15 @@ is called. The
 parameter should be one of
 .RS
 .TP 9
-.B MEM_SELF_MANAGED
-Internal buffer owned by fgets
+.B MEM_SELF_MANAGED " - " Internal buffer owned by fgets
 .TP
-.B MEM_MALLOC
-User-supplied malloc buffer; fgets frees it
+.B MEM_MALLOC " - " User-supplied malloc buffer; fgets frees it
 .TP
-.B MEM_MMAP
-User-supplied mmap buffer; fgets munmaps it
+.B MEM_MMAP " - " User-supplied mmap buffer; fgets munmaps it
 .TP
-.B MEM_MMAP_FILE
-Read-only mmap file data
+.B MEM_MMAP_FILE " - " Read-only mmap file data
 .RE
-.IP
+.PP
 The default is
 .B MEM_SELF_MANAGED
 which means its lifecycle is automatically handled. When
@@ -93,4 +89,3 @@ returns 0 on success and 1 on failure.
 
 .SH SEE ALSO
 .BR fgets (3)
-
