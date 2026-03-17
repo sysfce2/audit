@@ -499,29 +499,38 @@ AuParser_init(AuParser *self, PyObject *args, PyObject *kwds)
             PyErr_SetFromErrno(PyExc_EnvironmentError);
             return -1;
         }
-	const char *filename = NULL;
+        const char *filename = NULL;
+#if PY_MAJOR_VERSION >= 3
+        PyObject *name_obj = NULL;
+#endif
 #if PY_MAJOR_VERSION < 3
         /* PyFile_Name is available in Python 2 */
         filename = PYSTR_ASSTRING(PyFile_Name(source));
 #else
         /* In Python 3 obtain the name attribute if possible */
-        PyObject *name_obj = PyObject_GetAttrString(source, "name");
+        name_obj = PyObject_GetAttrString(source, "name");
         if (name_obj && PYSTR_CHECK(name_obj))
             filename = PYSTR_ASSTRING(name_obj);
-	Py_XDECREF(name_obj);
 #endif
         if ((self->au = auparse_init(source_type, fp)) == NULL) {
             if (filename)
                 PyErr_SetFromErrnoWithFilename(PyExc_IOError, filename);
             else
                 PyErr_SetFromErrno(PyExc_IOError);
+#if PY_MAJOR_VERSION >= 3
+            Py_XDECREF(name_obj);
+#endif
             fclose(fp);
             return -1;
         }
+#if PY_MAJOR_VERSION >= 3
+        Py_XDECREF(name_obj);
+#endif
     } break;
     case AUSOURCE_FEED: {
         if (source != Py_None) {
-            PyErr_SetString(PyExc_ValueError, "source must be None when source_type is AUSOURCE_FEED");
+            PyErr_SetString(PyExc_ValueError,
+		"source must be None when source_type is AUSOURCE_FEED");
             return -1;
         }
         if ((self->au = auparse_init(source_type, NULL)) == NULL) {
