@@ -3,6 +3,7 @@
 #include "structmember.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <time.h>
 #include <stdint.h>
 #include <unistd.h>
@@ -52,6 +53,16 @@ int PyFile_Check(PyObject *f) {
 
 static int debug = 0;
 static PyObject *NoParserError = NULL;
+
+/*
+ * duplicate_fd_cloexec - duplicate a file descriptor with close-on-exec set
+ * fd: file descriptor to duplicate
+ * returns: duplicated descriptor on success, -1 on error with errno set
+ */
+static inline int duplicate_fd_cloexec(int fd)
+{
+	return fcntl(fd, F_DUPFD_CLOEXEC, 0);
+}
 
 /*===========================================================================
  *                                AuEvent
@@ -451,7 +462,7 @@ AuParser_init(AuParser *self, PyObject *args, PyObject *kwds)
             PyErr_SetString(PyExc_ValueError, "source must be resolvable to a file descriptor when source_type is AUSOURCE_DESCRIPTOR");
             return -1;
         }
-        dup_fd = dup(fd);
+        dup_fd = duplicate_fd_cloexec(fd);
         if (dup_fd < 0) {
             PyErr_SetFromErrno(PyExc_EnvironmentError);
             return -1;
@@ -477,7 +488,7 @@ AuParser_init(AuParser *self, PyObject *args, PyObject *kwds)
             PyErr_SetString(PyExc_TypeError, "source must be open file when source_type is AUSOURCE_FILE_POINTER");
             return -1;
         }
-        dup_fd = dup(fd);
+        dup_fd = duplicate_fd_cloexec(fd);
         if (dup_fd < 0) {
             PyErr_SetFromErrno(PyExc_EnvironmentError);
             return -1;
