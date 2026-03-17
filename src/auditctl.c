@@ -1587,6 +1587,12 @@ static int fileopt(const char *file)
 		close(tfd);
 		return 1;
 	}
+	if (st.st_mode & S_IWOTH) {
+		audit_msg(LOG_ERR,
+			"Error - %s is world writable", file);
+		close(tfd);
+		return 1;
+	}
 
 	f = fdopen(tfd, "rm");
 	if (f == NULL) {
