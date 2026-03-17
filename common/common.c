@@ -205,7 +205,7 @@ const char *get_progname(void)
 		ssize_t len = readlink("/proc/self/exe",tname,sizeof(tname)-1);
 		if (len != -1) {
 			tname[len] = '\0';
-			strcpy(progname, basename(progname));
+			strcpy(progname, basename(tname));
 		} else
 			strcpy(progname, "unknown");
 	}
