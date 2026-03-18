@@ -127,14 +127,18 @@ static void common_inbound(void)
 			int len;
 			if ((len = auplugin_fgets(rx_buf,
 				    MAX_AUDIT_EVENT_FRAME_SIZE + 1, fd)) > 0) {
+				size_t copy_len;
+
 				// Got one - enqueue it
 				event_t *e = (event_t *)calloc(1,
 					 sizeof(event_t));
 				if (e) {
-					strncpy(e->data, rx_buf,
-						MAX_AUDIT_MESSAGE_LENGTH);
-					e->data[MAX_AUDIT_MESSAGE_LENGTH-1] = 0;
-					e->hdr.size = len;
+					copy_len = (size_t)len;
+					if (copy_len >= MAX_AUDIT_MESSAGE_LENGTH)
+						copy_len = MAX_AUDIT_MESSAGE_LENGTH - 1;
+					memcpy(e->data, rx_buf, copy_len);
+					e->data[copy_len] = 0;
+					e->hdr.size = copy_len;
 					e->hdr.ver = AUDISP_PROTOCOL_VER2;
 					enqueue(e, &q_config);
 				}
