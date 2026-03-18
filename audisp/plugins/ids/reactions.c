@@ -340,10 +340,25 @@ int system_halt(void)
 	return safe_exec("/sbin/init", "0");
 }
 
+/*
+ * get_reaction_account - fetch account name for current triggering session
+ * Returns: account name from current session, or NULL if unavailable
+ */
+static const char *get_reaction_account(void)
+{
+	session_data_t *s = current_session();
+
+	if (s == NULL)
+		return NULL;
+
+	return s->acct;
+}
+
 void do_reaction(unsigned int answer, const char *reason)
 {
 //my_printf("Answer: %u", answer);
 	unsigned int num = 0;
+	const char *acct = get_reaction_account();
 
 	do {
 		unsigned int tmp = 1 << num;
@@ -373,31 +388,27 @@ void do_reaction(unsigned int answer, const char *reason)
 					break;
 				case REACTION_RESTRICT_ROLE:
 					{
-					account_data_t *a = current_account();
-					if (a)
-					    restricted_role(a->name);
+					if (acct)
+						restricted_role(acct);
 					}
 					break;
 				case REACTION_PASSWORD_RESET:
 					{
-					account_data_t *a = current_account();
-					if (a)
-					    force_password_reset(a->name);
+					if (acct)
+						force_password_reset(acct);
 					}
 					break;
 				case REACTION_LOCK_ACCOUNT_TIMED:
 					{
-					account_data_t *a = current_account();
-					if (a)
-					    lock_account_timed(a->name,
+					if (acct)
+						lock_account_timed(acct,
 						config.lock_account_time);
 					}
 					break;
 				case REACTION_LOCK_ACCOUNT:
 					{
-					account_data_t *a = current_account();
-					if (a)
-					    lock_account(a->name);
+					if (acct)
+						lock_account(acct);
 					}
 					break;
 				case REACTION_BLOCK_ADDRESS_TIMED:
