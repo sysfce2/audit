@@ -544,11 +544,11 @@ static int parse_syscall(lnode *n, search_items *s)
 	} 
 	// get syscall
 	if (n->type == AUDIT_SYSCALL) {
-		str = strstr(term, "syscall=");
-		ptr = str + 8;
+		if ((str = strstr(term, "syscall=")))
+			ptr = str + 8;
 	} else if (n->type == AUDIT_URINGOP) { // or uring_op
-		str = strstr(term, "uring_op=");
-		ptr = str + 9;
+		if ((str = strstr(term, "uring_op=")))
+			ptr = str + 9;
 		s->arch = MACH_IO_URING;
 	} else
 		str = NULL; // unimplemented type
