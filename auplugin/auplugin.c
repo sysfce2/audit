@@ -213,9 +213,15 @@ int auplugin_event_feed(auparse_callback_ptr callback, unsigned int t_interval,
 
 		return -1;
 	}
-	pthread_detach(outbound_thread);
 
 	common_inbound();
+
+	rc = pthread_join(outbound_thread, NULL);
+	if (rc) {
+		syslog(LOG_ERR, "pthread_join failed: %d", rc);
+		return -1;
+	}
+
 	return 0;
 }
 
@@ -343,4 +349,3 @@ int auplugin_queue_overflow(void)
 {
 	return queue_overflowed_p();
 }
-
