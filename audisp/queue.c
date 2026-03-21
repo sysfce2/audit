@@ -60,7 +60,8 @@ extern ATOMIC_INT disp_hup;
 static unsigned int q_next, q_last; /* Fallback when atomics are absent */
 extern volatile ATOMIC_INT disp_hup;
 #endif
-static unsigned int q_depth, processing_suspended, overflowed;
+static unsigned int q_depth, overflowed;
+static ATOMIC_UNSIGNED processing_suspended;
 static ATOMIC_UNSIGNED currently_used, max_used;
 static int queue_full_warning = 0;
 static int persist_fd = -1;
@@ -69,8 +70,46 @@ static int persist_sync = 0;
 
 void reset_suspended(void)
 {
-	processing_suspended = 0;
+	AUDIT_ATOMIC_STORE(processing_suspended, 0);
 	queue_full_warning = 0;
+}
+
+/*
+ * Increment the queue depth counter and preserve the largest value seen.
+ * The max update is best-effort and uses compare-exchange to avoid losing
+ * concurrent updates from the producer and consumer threads.
+ */
+static unsigned int increase_used_count(void)
+{
+	unsigned int used;
+	unsigned int max;
+
+#ifdef HAVE_ATOMIC
+	used = atomic_fetch_add_explicit(&currently_used, 1,
+			memory_order_relaxed) + 1;
+	max = atomic_load_explicit(&max_used, memory_order_relaxed);
+	while (used > max &&
+	       !atomic_compare_exchange_weak_explicit(&max_used, &max, used,
+			memory_order_relaxed, memory_order_relaxed))
+		;
+#else
+	used = ++currently_used;
+	if (used > max_used)
+		max_used = used;
+#endif
+	return used;
+}
+
+/*
+ * Decrement the queue depth counter after the consumer removes an event.
+ */
+static void decrease_used_count(void)
+{
+#ifdef HAVE_ATOMIC
+	atomic_fetch_sub_explicit(&currently_used, 1, memory_order_relaxed);
+#else
+	currently_used--;
+#endif
 }
 
 static int queue_load_file(int fd)
@@ -116,9 +155,8 @@ static int queue_load_file(int fd)
 	q_next = count % q_depth;
 	q_last = 0;
 	#endif
-	currently_used = count;
-	if (max_used < count)
-		max_used = count;
+	AUDIT_ATOMIC_STORE(currently_used, count);
+	AUDIT_ATOMIC_STORE(max_used, count);
 
 	fclose(f);
 	return 0;
@@ -139,7 +177,7 @@ int init_queue_extended(unsigned int size, int flags, const char *path)
 		q_depth = size;
 		q = malloc(q_depth * sizeof(event_t *));
 		if (q == NULL) {
-			processing_suspended = 1;
+			AUDIT_ATOMIC_STORE(processing_suspended, 1);
 			return -1;
 		}
 
@@ -202,7 +240,7 @@ static int do_overflow_action(struct disp_conf *config)
                 case O_SUSPEND:
                         syslog(LOG_ALERT,
                             "Auditd is suspending event passing to plugins due to overflowing its queue.");
-                        processing_suspended = 1;
+                        AUDIT_ATOMIC_STORE(processing_suspended, 1);
                         break;
                 case O_SINGLE:
                         syslog(LOG_ALERT,
@@ -231,7 +269,7 @@ int enqueue(event_t *e, struct disp_conf *config)
 {
 	unsigned int n, retry_cnt = 0;
 
-	if (processing_suspended) {
+	if (AUDIT_ATOMIC_LOAD(processing_suspended)) {
 		free(e);
 		return 1;
 	}
@@ -271,9 +309,7 @@ retry:
 #else
 		q_next = (n+1) % q_depth;
 #endif
-		currently_used++;
-		if (currently_used > max_used)
-			max_used = currently_used;
+		increase_used_count();
 		if (persist_fd >= 0) {
 			if (write(persist_fd, e->data, e->hdr.size) < 0) {
 				/* Log error but continue - persistence is not critical */
@@ -329,7 +365,7 @@ static event_t *dequeue_common(void)
 #else
 		q_last = (n+1) % q_depth;
 #endif
-		currently_used--;
+		decrease_used_count();
 	} else
 		e = NULL;
 
@@ -413,18 +449,21 @@ void increase_queue_depth(unsigned int size)
 
 void write_queue_state(FILE *f)
 {
-	fprintf(f, "current plugin queue depth = %u\n", currently_used);
-	fprintf(f, "max plugin queue depth used = %u\n", max_used);
+	fprintf(f, "current plugin queue depth = %u\n",
+		AUDIT_ATOMIC_LOAD(currently_used));
+	fprintf(f, "max plugin queue depth used = %u\n",
+		AUDIT_ATOMIC_LOAD(max_used));
 	fprintf(f, "plugin queue size = %u\n", q_depth);
 	fprintf(f, "plugin queue overflow detected = %s\n",
 				overflowed ? "yes" : "no");
 	fprintf(f, "plugin queueing suspended = %s\n",
-				processing_suspended ? "yes" : "no");
+				AUDIT_ATOMIC_LOAD(processing_suspended) ?
+				"yes" : "no");
 }
 
 void resume_queue(void)
 {
-	processing_suspended = 0;
+	AUDIT_ATOMIC_STORE(processing_suspended, 0);
 }
 
 void destroy_queue(void)
@@ -438,7 +477,7 @@ void destroy_queue(void)
 	pthread_mutex_destroy(&queue_lock);
 	sem_destroy(&queue_nonempty);
 	if (persist_fd >= 0) {
-		if (currently_used == 0) {
+		if (AUDIT_ATOMIC_LOAD(currently_used) == 0) {
 			if (ftruncate(persist_fd, 0) < 0) {
 				/* Log error but continue - cleanup is not critical */
 				syslog(LOG_WARNING, "Failed to truncate persistent queue file");
@@ -460,23 +499,23 @@ void destroy_queue(void)
 	q_last = 0;
 #endif
 	q_depth = 0;
-	processing_suspended = 1;
-	currently_used = 0;
-	max_used = 0;
+	AUDIT_ATOMIC_STORE(processing_suspended, 1);
+	AUDIT_ATOMIC_STORE(currently_used, 0);
+	AUDIT_ATOMIC_STORE(max_used, 0);
 	overflowed = 0;
 }
 
 unsigned int queue_current_depth(void)
 {
-       return currently_used;
+	return AUDIT_ATOMIC_LOAD(currently_used);
 }
 
 unsigned int queue_max_depth(void)
 {
-       return max_used;
+	return AUDIT_ATOMIC_LOAD(max_used);
 }
 
 int queue_overflowed_p(void)
 {
-       return overflowed;
+	return overflowed;
 }
