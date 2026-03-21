@@ -368,20 +368,44 @@ void increase_queue_depth(unsigned int size)
 {
 	pthread_mutex_lock(&queue_lock);
 	if (size > q_depth) {
-		unsigned int i;
-		void *tmp_q;
+		volatile event_t **tmp_q;
+		unsigned int count, i, old_depth, old_last;
 
-		tmp_q = realloc(q, size * sizeof(event_t *));
+		old_depth = q_depth;
+		count = AUDIT_ATOMIC_LOAD(currently_used);
+#ifdef HAVE_ATOMIC
+		old_last = atomic_load_explicit(&q_last,
+				memory_order_relaxed) % old_depth;
+#else
+		old_last = q_last % old_depth;
+#endif
+
+		tmp_q = calloc(size, sizeof(event_t *));
 		if (tmp_q == NULL) {
 			fprintf(stderr, "Out of Memory. Check %s file, %d line",
 				__FILE__, __LINE__);
 			pthread_mutex_unlock(&queue_lock);
 			return;
 		}
+
+		/*
+		 * Preserve FIFO order across a grow. Once the ring has wrapped,
+		 * simply extending the backing array strands the entries stored
+		 * at the start of the old allocation.
+		 */
+		for (i = 0; i < count; i++)
+			tmp_q[i] = q[(old_last + i) % old_depth];
+
+		free((void *)q);
 		q = tmp_q;
-		for (i=q_depth; i<size; i++)
-			q[i] = NULL;
 		q_depth = size;
+#ifdef HAVE_ATOMIC
+		atomic_store_explicit(&q_last, 0, memory_order_relaxed);
+		atomic_store_explicit(&q_next, count, memory_order_relaxed);
+#else
+		q_last = 0;
+		q_next = count;
+#endif
 		overflowed = 0;
 	}
 	pthread_mutex_unlock(&queue_lock);
@@ -456,4 +480,3 @@ int queue_overflowed_p(void)
 {
        return overflowed;
 }
-

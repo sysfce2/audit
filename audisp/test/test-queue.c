@@ -239,6 +239,93 @@ out_f:
 	return rc;
 }
 
+static int resize_wrap_test(void)
+{
+	struct disp_conf conf;
+	event_t *e = NULL;
+	char buf[32];
+	int i, rc = 1;
+
+	memset(&conf, 0, sizeof(conf));
+	conf.overflow_action = O_IGNORE;
+
+	if (init_queue(100)) {
+		fprintf(stderr, "resize_wrap_test: init_queue failed\n");
+		return rc;
+	}
+
+	/* Fill the ring so the next enqueue sequence can wrap it. */
+	for (i = 0; i < 100; i++) {
+		snprintf(buf, sizeof(buf), "event-%03d", i);
+		e = make_event(buf);
+		if (!e || enqueue(e, &conf)) {
+			fprintf(stderr, "resize_wrap_test: enqueue failed\n");
+			goto out_q;
+		}
+		e = NULL;
+	}
+
+	for (i = 0; i < 80; i++) {
+		snprintf(buf, sizeof(buf), "event-%03d", i);
+		e = dequeue();
+		if (!e) {
+			fprintf(stderr, "resize_wrap_test: queue underflow\n");
+			goto out_q;
+		}
+		if (strcmp(e->data, buf) != 0) {
+			fprintf(stderr, "resize_wrap_test: initial data mismatch\n");
+			goto out_free;
+		}
+		free(e);
+		e = NULL;
+	}
+
+	/* Add more entries so the live data spans the end and start. */
+	for (i = 100; i < 120; i++) {
+		snprintf(buf, sizeof(buf), "event-%03d", i);
+		e = make_event(buf);
+		if (!e || enqueue(e, &conf)) {
+			fprintf(stderr,
+				"resize_wrap_test: wrapped enqueue failed\n");
+			goto out_q;
+		}
+		e = NULL;
+	}
+
+	/* Growing a wrapped ring must not strand the entries at slot 0. */
+	increase_queue_depth(200);
+
+	/* The consumer should still see the wrapped entries in FIFO order. */
+	for (i = 80; i < 120; i++) {
+		snprintf(buf, sizeof(buf), "event-%03d", i);
+		e = dequeue();
+		if (!e) {
+			fprintf(stderr,
+				"resize_wrap_test: queue underflow after resize\n");
+			goto out_q;
+		}
+		if (strcmp(e->data, buf) != 0) {
+			fprintf(stderr,
+				"resize_wrap_test: data mismatch after resize\n");
+			goto out_free;
+		}
+		free(e);
+		e = NULL;
+	}
+
+	if (queue_current_depth() != 0) {
+		fprintf(stderr, "resize_wrap_test: depth not zero\n");
+		goto out_q;
+	}
+
+	rc = 0;
+out_free:
+	free(e);
+out_q:
+	destroy_queue();
+	return rc;
+}
+
 int main(void)
 {
 	const char *srcdir = getenv("srcdir") ? getenv("srcdir") : ".";
@@ -247,10 +334,11 @@ int main(void)
 
 	if (basic_test(path))
 		return 1;
+	if (resize_wrap_test())
+		return 1;
 	if (persist_test(path))
 		return 1;
 	if (concurrency_test(path))
 		return 1;
 	return 0;
 }
-
