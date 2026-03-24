@@ -64,6 +64,8 @@ enum {
 /* Global functions */
 static int handle_request(int status);
 static void get_reply(void);
+static int process_key_option(const char *optarg, char *key,
+			      unsigned int *keylen);
 extern int delete_all_rules(int fd);
 
 /* Global vars */
@@ -785,8 +787,12 @@ static int opt_list(opt_handler_params_t *args)
 			return OPT_ERROR_NO_REPLY;
 		}
 	} else if (*(args->count) == 4) {
+		int rc;
+
 		if (args->vars[optind] && strcmp(args->vars[optind], "-k") == 0) {
-			strncat(key, args->vars[3], keylen);
+			rc = process_key_option(args->vars[3], key, &keylen);
+			if (rc)
+				return rc;
 			*(args->count) -= 2;
 		} else {
 			audit_msg(LOG_ERR,
@@ -1118,8 +1124,12 @@ static int opt_delete_all(opt_handler_params_t *args)
 		return OPT_ERROR_NO_REPLY;
 	}
 	if (*(args->count) == 4) {
+		int rc;
+
 		if (strcmp(args->vars[optind], "-k") == 0) {
-			strncat(key, args->vars[3], keylen);
+			rc = process_key_option(args->vars[3], key, &keylen);
+			if (rc)
+				return rc;
 			*(args->count) -= 2;
 		} else {
 			audit_msg(LOG_ERR,
