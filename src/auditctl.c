@@ -992,8 +992,10 @@ static int process_key_option(const char *optarg, char *key,
 		audit_msg(LOG_ERR, "key option exceeds size limit");
 		return OPT_ERROR_NO_REPLY;
 	}
-	if (strchr(optarg, AUDIT_KEY_SEPARATOR))
+	if (strchr(optarg, AUDIT_KEY_SEPARATOR)) {
 		audit_msg(LOG_ERR, "key %s has illegal character", optarg);
+		return OPT_ERROR_NO_REPLY;
+	}
 	if (key[0]) {
 		strcat(key, key_sep);
 		(*keylen)--;
@@ -1889,4 +1891,3 @@ static void get_reply(void)
 		}
 	}
 }
-
